@@ -30,6 +30,22 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Project setup
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          npm ci
+          npx prisma generate
+          npx prisma migrate deploy
+          npm run dev:daemon
+          npx wait-on http://localhost:3000 --timeout 60000
+
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
@@ -43,8 +59,9 @@ jobs:
           # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
           # prompt: 'Update the pull request description to include a summary of changes.'
 
-          # Optional: Add claude_args to customize behavior and configuration
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
-          # claude_args: '--allowed-tools Bash(gh pr *)'
-
+          claude_args: |
+            --system-prompt "The project is already set up with all dependencies installed. The server is already running on localhost:3000. Logs from it are being written to logs.txt. If needed you can query the db with the 'sqlite3' cli. If needed use the mcp__playwright set of tools to launch a browser and interact with the app."
+            --mcp-config '{"mcpServers":{"playwright":{"command":"npx","args":["@playwright/mcp@latest","--allowed-origins","localhost:3000;cdn.tailwindcss.com;esm.sh"]}}}'
+            --allowedTools "mcp__playwright,Read,Glob,Grep,Edit,Write,Bash(sqlite3 *)"
