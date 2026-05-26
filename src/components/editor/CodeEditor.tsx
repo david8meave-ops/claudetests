@@ -1,9 +1,37 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import Editor from "@monaco-editor/react";
+import Editor, { loader } from "@monaco-editor/react";
 import { useFileSystem } from "@/lib/contexts/file-system-context";
 import { Code2 } from "lucide-react";
+
+// Serve Monaco Editor from the locally-installed npm package via a Next.js
+// API route (src/app/vs/[...path]/route.ts) so that ad-blockers and
+// restrictive networks cannot block the default jsdelivr CDN.
+//
+// We also set up MonacoEnvironment so that the AMD loader inside each web
+// worker can resolve relative module paths (e.g. tsWorker.js) back to the
+// same local route.  Without this, workers started from a blob URL have no
+// origin to resolve "/vs/…" paths against and throw "Failed to parse URL".
+if (typeof window !== "undefined") {
+  (window as any).MonacoEnvironment = {
+    getWorker(_workerId: string, _label: string) {
+      // baseUrl must be the site root so Monaco constructs paths like
+      // `${origin}/vs/language/typescript/tsWorker.js`, NOT
+      // `${origin}/vs/vs/language/typescript/tsWorker.js`.
+      const origin = window.location.origin;
+      const vsRoot = `${origin}/vs/`;
+      const code = [
+        `self.MonacoEnvironment = { baseUrl: '${origin}/' };`,
+        `importScripts('${vsRoot}base/worker/workerMain.js');`,
+      ].join("\n");
+      const blob = new Blob([code], { type: "text/javascript" });
+      return new Worker(URL.createObjectURL(blob));
+    },
+  };
+}
+
+loader.config({ paths: { vs: "/vs" } });
 
 export function CodeEditor() {
   const { selectedFile, getFileContent, updateFile } = useFileSystem();
